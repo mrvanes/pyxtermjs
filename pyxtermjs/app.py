@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import argparse
-from flask import Flask, render_template
-from flask_socketio import SocketIO
+from flask import Flask, render_template, request
+from flask_socketio import SocketIO, join_room, leave_room
 import pty
 import os
 import subprocess
@@ -15,12 +15,15 @@ import sys
 
 logging.getLogger("werkzeug").setLevel(logging.ERROR)
 
-__version__ = "0.5.0.2"
+__version__ = "0.5.1"
 
 app = Flask(__name__, template_folder=".", static_folder=".", static_url_path="")
 app.config["SECRET_KEY"] = "secret!"
-app.config["fd"] = None
-app.config["child_pid"] = None
+# app.config["fd"] = None
+# app.config["child_pid"] = None
+
+app.sessions = {}
+
 socketio = SocketIO(app)
 
 
@@ -30,25 +33,23 @@ def set_winsize(fd, row, col, xpix=0, ypix=0):
     fcntl.ioctl(fd, termios.TIOCSWINSZ, winsize)
 
 
-def read_and_forward_pty_output():
+def read_and_forward_pty_output(sid):
     max_read_bytes = 1024 * 20
-    logging.debug("read_and_forward_pty_output started")
-    while True and app.config["child_pid"]:
+    logging.debug(f"read_and_forward_pty_output started {sid}")
+    while app.sessions.get(sid):
+        (data_ready, _, _) = select.select([app.sessions[sid]], [], [], 0)
+        if data_ready:
+            try:
+                output = os.read(app.sessions[sid], max_read_bytes).decode(
+                    errors="ignore"
+                )
+                socketio.emit("pty-output", {"output": output}, namespace="/pty", room=sid)
+            except Exception:
+                # There was no input anymore (ctrl-d)
+                break
         socketio.sleep(0.01)
-        if app.config["fd"]:
-            timeout_sec = 0
-            (data_ready, _, _) = select.select([app.config["fd"]], [], [], timeout_sec)
-            if data_ready:
-                try:
-                    output = os.read(app.config["fd"], max_read_bytes).decode(
-                        errors="ignore"
-                    )
-                    socketio.emit("pty-output", {"output": output}, namespace="/pty")
-                except Exception:
-                    # There was no input anymore (ctrl-d)
-                    break
-    logging.debug("read_and_forward_pty_output stopped")
-    socketio.emit("pty-disconnect", {"output": "disconnected"}, namespace="/pty")
+    logging.debug(f"read_and_forward_pty_output stopped {sid}")
+    socketio.emit("pty-disconnect", {"output": f"disconnected"}, namespace="/pty", room=sid)
 
 
 @app.route("/")
@@ -61,48 +62,50 @@ def pty_input(data):
     """write to the child pty. The pty sees this as if you are typing in a real
     terminal.
     """
-    if app.config["fd"]:
-        logging.debug("received input from browser: %s" % data["input"])
-        os.write(app.config["fd"], data["input"].encode())
+    sid = request.sid
+    if app.sessions.get(sid):
+        # logging.debug(f"received input from browser: {sid} {data['input']}")
+        os.write(app.sessions[sid], data["input"].encode())
 
 
 @socketio.on("resize", namespace="/pty")
 def resize(data):
-    if app.config["fd"]:
+    sid = request.sid
+    if app.sessions.get(sid):
         logging.debug(f"Resizing window to {data['rows']}x{data['cols']}")
-        set_winsize(app.config["fd"], data["rows"], data["cols"])
+        set_winsize(app.sessions[sid], data["rows"], data["cols"])
 
 
 @socketio.on("connect", namespace="/pty")
 def connect():
     """new client connected"""
-    logging.info("new client connected")
-    if app.config["child_pid"]:
+    sid = request.sid
+    # ns = request.namespace
+    logging.info(f"new client connected: {sid}")
+    # if app.config["child_pid"]:
+    if app.sessions.get(sid):
         # already started child process, don't start another
         return
 
     # create child process attached to a pty we can read from and write to
     (child_pid, fd) = pty.fork()
-    print(f"child_pid: {child_pid}")
     if child_pid == 0:
         # this is the child process fork.
         # anything printed here will show up in the pty, including the output
         # of this subprocess
-        print("child == 0")
         subprocess.run(app.config["cmd"])
-        print("subprocess done")
     else:
+        join_room(sid)
         # this is the parent process fork.
         # store child fd and pid
-        app.config["fd"] = fd
-        app.config["child_pid"] = child_pid
+        app.sessions[sid] = fd
         set_winsize(fd, 50, 50)
         cmd = " ".join(shlex.quote(c) for c in app.config["cmd"])
         # logging/print statements must go after this because... I have no idea why
         # but if they come before the background task never starts
-        socketio.start_background_task(target=read_and_forward_pty_output)
+        socketio.start_background_task(read_and_forward_pty_output, sid)
 
-        logging.info("child pid is " + child_pid)
+        logging.info(f"child pid is {child_pid}")
         logging.info(
             f"starting background task with command `{cmd}` to continously read "
             "and forward pty output to client"
@@ -114,8 +117,10 @@ def connect():
 def disconnect():
     """client disconnected"""
     logging.info("client disconnected")
-    app.config["fd"] = None
-    app.config["child_pid"] = None
+    sid = request.sid
+    app.sessions[sid] = None
+    leave_room(sid)
+
 
 def main():
     parser = argparse.ArgumentParser(

@@ -6,5 +6,6 @@ venv
 build
 __pycache__
 bin/
+include/
 lib/
 pyvenv.cfg
