@@ -7,19 +7,14 @@
         font-family: arial;
       }
     </style>
-    <link
-      rel="stylesheet"
-      href="https://unpkg.com/xterm@4.11.0/css/xterm.css"
-    />
+    <link rel="stylesheet" href="https://unpkg.com/xterm@4.11.0/css/xterm.css" />
   </head>
   <body>
-      <a href="https://github.com/cs01/pyxtermjs" target="_blank" style="font-size: 1.4em; text-decoration: none; color:black">pyxterm.js</a
-      >&nbsp;&nbsp;&nbsp;
+      <a href="https://github.com/cs01/pyxtermjs" target="_blank" style="font-size: 1.4em; text-decoration: none; color:black">pyxterm.js</a>
     </a>
-    <span style="font-size: small"
-      >status:
-      <span style="font-size: small" id="status">connecting...</span></span
-    >
+    <span style="font-size: small">status:
+      <span style="background-color: #ff8383;" id="status">connecting...</span>
+    </span>
 
     <div style="width: 100%; height: calc(100% - 50px)" id="terminal"></div>
 
@@ -31,8 +26,7 @@
     <script src="https://unpkg.com/xterm@4.11.0/lib/xterm.js"></script>
     <script src="https://unpkg.com/xterm-addon-fit@0.5.0/lib/xterm-addon-fit.js"></script>
     <script src="https://unpkg.com/xterm-addon-web-links@0.4.0/lib/xterm-addon-web-links.js"></script>
-    <script src="https://unpkg.com/xterm-addon-search@0.8.0/lib/xterm-addon-sear
-ch.js"></script>
+    <script src="https://unpkg.com/xterm-addon-search@0.8.0/lib/xterm-addon-search.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.min.js"></script>
 
     <script>
@@ -64,24 +58,49 @@ ch.js"></script>
         socket.emit("pty-input", { input: data });
       });
 
-      const socket = io.connect("/pty");
+      // const socket = io.connect("/pty");
+      const socket = io("/pty", {
+          reconnection: false,
+        }
+      );
       const status = document.getElementById("status");
+      status.onclick = function() {connect()};
 
       socket.on("pty-output", function (data) {
         console.log("new output received from server:", data.output);
         term.write(data.output);
       });
 
+      socket.on("pty-disconnect", function (data) {
+        console.log("pty-disconnect:", data.output);
+        term.write(data.output);
+        disconnect();
+      });
+
       socket.on("connect", () => {
+        console.log("socket.connect");
         fitToscreen();
         status.innerHTML =
-          '<span style="background-color: lightgreen;">connected</span>';
+          '<span style="background-color: lightgreen;">disconnect</span>';
+        status.onclick = function() {disconnect()};
       });
 
       socket.on("disconnect", () => {
+        console.log("socket.disconnect");
         status.innerHTML =
-          '<span style="background-color: #ff8383;">disconnected</span>';
+          '<span style="background-color: #ff8383;">connect</span>';
+        status.onclick = function() {connect()};
       });
+
+      function connect() {
+        console.log("connect");
+        socket.connect();
+      }
+
+      function disconnect() {
+        console.log("disconnect");
+        socket.disconnect();
+      }
 
       function fitToscreen() {
         fit.fit();
@@ -111,7 +130,7 @@ ch.js"></script>
           if (key === "v") {
             // ctrl+shift+v: paste whatever is in the clipboard
             navigator.clipboard.readText().then((toPaste) => {
-              term.writeText(toPaste);
+              if (term.writeText) { term.writeText(toPaste); }
             });
             return false;
           } else if (key === "c" || key === "x") {

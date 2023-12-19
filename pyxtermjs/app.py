@@ -32,16 +32,23 @@ def set_winsize(fd, row, col, xpix=0, ypix=0):
 
 def read_and_forward_pty_output():
     max_read_bytes = 1024 * 20
-    while True:
+    logging.debug("read_and_forward_pty_output started")
+    while True and app.config["child_pid"]:
         socketio.sleep(0.01)
         if app.config["fd"]:
             timeout_sec = 0
             (data_ready, _, _) = select.select([app.config["fd"]], [], [], timeout_sec)
             if data_ready:
-                output = os.read(app.config["fd"], max_read_bytes).decode(
-                    errors="ignore"
-                )
-                socketio.emit("pty-output", {"output": output}, namespace="/pty")
+                try:
+                    output = os.read(app.config["fd"], max_read_bytes).decode(
+                        errors="ignore"
+                    )
+                    socketio.emit("pty-output", {"output": output}, namespace="/pty")
+                except Exception:
+                    # There was no input anymore (ctrl-d)
+                    break
+    logging.debug("read_and_forward_pty_output stopped")
+    socketio.emit("pty-disconnect", {"output": "disconnected"}, namespace="/pty")
 
 
 @app.route("/")
@@ -76,11 +83,14 @@ def connect():
 
     # create child process attached to a pty we can read from and write to
     (child_pid, fd) = pty.fork()
+    print(f"child_pid: {child_pid}")
     if child_pid == 0:
         # this is the child process fork.
         # anything printed here will show up in the pty, including the output
         # of this subprocess
+        print("child == 0")
         subprocess.run(app.config["cmd"])
+        print("subprocess done")
     else:
         # this is the parent process fork.
         # store child fd and pid
@@ -99,6 +109,13 @@ def connect():
         )
         logging.info("task started")
 
+
+@socketio.on("disconnect", namespace="/pty")
+def disconnect():
+    """client disconnected"""
+    logging.info("client disconnected")
+    app.config["fd"] = None
+    app.config["child_pid"] = None
 
 def main():
     parser = argparse.ArgumentParser(
