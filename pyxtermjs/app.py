@@ -24,7 +24,7 @@ app.config["SECRET_KEY"] = "secret!"
 
 app.sessions = {}
 
-socketio = SocketIO(app)
+socketio = SocketIO(app, cors_allowed_origins="*")
 
 
 def set_winsize(fd, row, col, xpix=0, ypix=0):
