@@ -108,7 +108,10 @@
       }
 
       function disconnect() {
-        console.log("disconnect");
+        term.writeln('')
+        term.writeln('disconnected')
+        term.writeln('')
+        console.log("disconnected");
         socket.disconnect();
       }
 
