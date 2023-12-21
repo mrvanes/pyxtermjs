@@ -24,7 +24,7 @@ app.config["SECRET_KEY"] = "secret!"
 
 app.sessions = {}
 
-socketio = SocketIO(app, cors_allowed_origins="*")
+socketio = SocketIO(app, cors_allowed_origins=[])
 
 
 def set_winsize(fd, row, col, xpix=0, ypix=0):
@@ -37,19 +37,18 @@ def read_and_forward_pty_output(sid):
     max_read_bytes = 1024 * 20
     logging.debug(f"read_and_forward_pty_output started {sid}")
     while app.sessions.get(sid):
-        (data_ready, _, _) = select.select([app.sessions[sid]], [], [], 0)
-        if data_ready:
-            try:
-                output = os.read(app.sessions[sid], max_read_bytes).decode(
-                    errors="ignore"
-                )
+        try:
+            (data_ready, _, _) = select.select([app.sessions[sid]], [], [], 0)
+            if data_ready:
+                output = os.read(app.sessions[sid], max_read_bytes).decode(errors="ignore")
                 socketio.emit("pty-output", {"output": output}, namespace="/pty", room=sid)
-            except Exception:
-                # There was no input anymore (ctrl-d)
-                break
+        except Exception:
+            # There was no input anymore (ctrl-d)
+            logging.debug(f"read_and_forward_pty_output except {sid}")
+            break
         socketio.sleep(0.01)
     logging.debug(f"read_and_forward_pty_output stopped {sid}")
-    socketio.emit("pty-disconnect", {"output": f"disconnected"}, namespace="/pty", room=sid)
+    socketio.emit("pty-disconnect", {"output": "disconnected"}, namespace="/pty", room=sid)
 
 
 @app.route("/")
@@ -97,15 +96,15 @@ def connect():
     else:
         join_room(sid)
         # this is the parent process fork.
-        # store child fd and pid
+        # store child fd in sid
         app.sessions[sid] = fd
-        set_winsize(fd, 50, 50)
-        cmd = " ".join(shlex.quote(c) for c in app.config["cmd"])
+        # set_winsize(fd, 50, 50)
         # logging/print statements must go after this because... I have no idea why
         # but if they come before the background task never starts
         socketio.start_background_task(read_and_forward_pty_output, sid)
 
         logging.info(f"child pid is {child_pid}")
+        cmd = " ".join(shlex.quote(c) for c in app.config["cmd"])
         logging.info(
             f"starting background task with command `{cmd}` to continously read "
             "and forward pty output to client"

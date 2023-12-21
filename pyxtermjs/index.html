@@ -5,23 +5,31 @@
     <style>
       html {
         font-family: arial;
+        height: 100%;
+        width: 100%;
+      }
+      body {
+        background: lightgrey;
+        height: calc(100% - 10px);
+        width: calc(100% - 10px);
+        margin: 0px;
+        padding: 5px;
       }
     </style>
     <link rel="stylesheet" href="https://unpkg.com/xterm@4.11.0/css/xterm.css" />
   </head>
   <body>
-      <a href="https://github.com/cs01/pyxtermjs" target="_blank" style="font-size: 1.4em; text-decoration: none; color:black">pyxterm.js</a>
-    </a>
+    <a href="https://github.com/cs01/pyxtermjs" target="_blank" style="font-size: 1.4em; text-decoration: none; color:black">pyxterm.js</a>
     <span style="font-size: small">status:
-      <span style="background-color: #ff8383;" id="status">connecting...</span>
+      <span id="status"><button style="background-color: #ff8383;">connecting...</button></span>
     </span>
 
-    <div style="width: 100%; height: calc(100% - 50px)" id="terminal"></div>
+    <div style="width: calc(100% - 30px); height: calc(100% - 60px); margin-top: 5px;" id="terminal"></div>
 
-    <p style="text-align: right; font-size: small">
+    <div style="text-align: right; font-size: small">
       built by <a href="https://chadsmith.dev">Chad Smith</a>
       <a href="https://github.com/cs01">GitHub</a>
-    </p>
+    </div>
     <!-- xterm -->
     <script src="https://unpkg.com/xterm@4.11.0/lib/xterm.js"></script>
     <script src="https://unpkg.com/xterm-addon-fit@0.5.0/lib/xterm-addon-fit.js"></script>
@@ -33,7 +41,9 @@
       const term = new Terminal({
         cursorBlink: true,
         macOptionIsMeta: true,
-        scrollback: true,
+        // scrollback: 200,
+        // cols: 50,
+        // rows: 15,
       });
       term.attachCustomKeyEventHandler(customKeyEventHandler);
       // https://github.com/xtermjs/xterm.js/issues/2941
@@ -44,9 +54,9 @@
 
       term.open(document.getElementById("terminal"));
       fit.fit();
-      term.resize(15, 50);
+      // term.resize(15, 50);
       console.log(`size: ${term.cols} columns, ${term.rows} rows`);
-      fit.fit();
+      // fit.fit();
       term.writeln("Welcome to pyxterm.js!");
       term.writeln("https://github.com/cs01/pyxterm.js");
       term.writeln('')
@@ -81,14 +91,14 @@
         console.log("socket.connect");
         fitToscreen();
         status.innerHTML =
-          '<span style="background-color: lightgreen;">disconnect</span>';
+          '<button style="background-color: lightgreen;">disconnect</button>';
         status.onclick = function() {disconnect()};
       });
 
       socket.on("disconnect", () => {
         console.log("socket.disconnect");
         status.innerHTML =
-          '<span style="background-color: #ff8383;">connect</span>';
+          '<button style="background-color: #ff8383;">connect</button>';
         status.onclick = function() {connect()};
       });
 
