@@ -48,7 +48,7 @@ def read_and_forward_pty_output(sid):
             break
         socketio.sleep(0.01)
     logging.debug(f"read_and_forward_pty_output stopped {sid}")
-    socketio.emit("pty-disconnect", {"output": "disconnected"}, namespace="/pty", room=sid)
+    # socketio.emit("pty-disconnect", {"output": "disconnected"}, namespace="/pty", room=sid)
 
 
 @app.route("/")
