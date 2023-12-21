@@ -83,7 +83,7 @@
 
       socket.on("pty-disconnect", function (data) {
         console.log("pty-disconnect:", data.output);
-        term.write(data.output);
+        // term.write(data.output);
         disconnect();
       });
 
@@ -110,7 +110,6 @@
       function disconnect() {
         term.writeln('')
         term.writeln('disconnected')
-        term.writeln('')
         console.log("disconnected");
         socket.disconnect();
       }
